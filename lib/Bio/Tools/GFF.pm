@@ -769,7 +769,7 @@ sub _gff1_string{
  Title   : _gff2_string
  Usage   : $gffstr = $gffio->_gff2_string
  Function:
- Example :
+ Example : 9th column: ID "gene-1" ; Name "name 1" name2
  Returns : A GFF2-formatted string representation of the SeqFeature
  Args    : A Bio::SeqFeatureI implementing object to be GFF2-stringified
 
@@ -828,28 +828,35 @@ sub _gff2_string{
     # must be quoted with double quotes".
     # MW
 
-    my @group;
-
-    foreach my $tag ( $feat->get_all_tags ) {
-        next if exists $SKIPPED_TAGS{$tag};
-        my @v;
-        foreach my $value ( $feat->get_tag_values($tag) ) {
-            unless( defined $value && length($value) ) {
-                # quote anything other than valid tag/value characters
-                $value = '""';
-            } elsif ($value =~ /[^A-Za-z0-9_]/){
-                # substitute tab and newline chars by their UNIX equivalent
-                $value =~ s/\t/\\t/g;
-                $value =~ s/\n/\\n/g;
-                $value = '"' . $value . '" ';
+    my @all_tags = $feat->all_tags;
+    my @group; my @firstgroup;
+    if (@all_tags) {   # only play this game if it is worth playing...
+        foreach my $tag ( @all_tags ) {
+            next if exists $SKIPPED_TAGS{$tag};
+            my @v;
+            foreach my $value ( $feat->get_tag_values($tag) ) {
+                unless( defined $value && length($value) ) {
+                    # quote anything other than valid tag/value characters
+                    $value = '""';
+                } elsif ($value =~ /[^A-Za-z0-9_]/){
+                    # substitute tab and newline chars by their UNIX equivalent
+                    $value =~ s/\t/\\t/g;
+                    $value =~ s/\n/\\n/g;
+                    $value = '"' . $value . '"';
+                }
+                push @v, $value;
+                # for this tag (allowed in GFF2 and .ace format)
             }
-            push @v, $value;
-            # for this tag (allowed in GFF2 and .ace format)
-        }
-        push @group, "$tag ".join(" ", @v);
-    }
 
-    $str2 .= join(' ; ', @group);
+            if (($tag eq 'Group') || ($tag eq 'Target')){ # hopefully we won't get both...
+                push @firstgroup, "$tag ".join(" ", @v);
+            } else {
+                push @group, "$tag ".join(" ", @v);
+            }
+        }
+    }
+    $str2 = join(' ; ', (@firstgroup, @group));
+#    $str2 .= join('; ', @group);
     # Add Target information for Feature Pairs
     if( ! $feat->has_tag('Target') && # This is a bad hack IMHO
         ! $feat->has_tag('Group')  &&
@@ -871,10 +878,10 @@ sub _gff2_string{
  Title   : _gff25_string
  Usage   : $gffstr = $gffio->_gff2_string
  Function: To get a format of GFF that is peculiar to Gbrowse/Bio::DB::GFF
- Example :
+ Example : 9th column: ID "gene-1"; Name "name 1" name2;
  Returns : A GFF2.5-formatted string representation of the SeqFeature
  Args    : A Bio::SeqFeatureI implementing object to be GFF2.5-stringified
-
+ Comments: GFF2.5 is suposed to be similar as GTF (with semicolon at the end).
 =cut
 
 sub _gff25_string {
@@ -908,10 +915,9 @@ sub _gff25_string {
 
     if( $feat->can('seqname') ) {
         $name = $feat->seq_id();
-        $name ||= 'SEQ';
-    } else {
-        $name = 'SEQ';
-    }
+    } 
+    $name ||= 'SEQ';
+
     $str1 = join("\t",
                  $name,
                  $feat->source_tag(),
@@ -926,16 +932,16 @@ sub _gff25_string {
     my @group; my @firstgroup;
     if (@all_tags) {   # only play this game if it is worth playing...
         foreach my $tag ( @all_tags ) {
-            my @v;
-            foreach my $value ( $feat->get_tag_values($tag) ) {
             next if exists $SKIPPED_TAGS{$tag};
+            my @v;
+            foreach my $value ( $feat->get_tag_values($tag) ) {   
                 unless( defined $value && length($value) ) {
                     $value = '""';
                 } elsif ($value =~ /[^A-Za-z0-9_]/){
                     $value =~ s/\t/\\t/g; # substitute tab and newline
                     # characters
                     $value =~ s/\n/\\n/g; # to their UNIX equivalents
-                    $value = '"' . $value . '" ';
+                    $value = '"' . $value . '"';
                 } # if the value contains
                   # anything other than valid
                   # tag/value characters, then
@@ -943,6 +949,7 @@ sub _gff25_string {
                 push @v, $value;
                 # for this tag (allowed in GFF2 and .ace format)
             }
+            $v[$#v] =~ s/\s+$//; #remove left space of the last value
             if (($tag eq 'Group') || ($tag eq 'Target')){ # hopefully we won't get both...
                 push @firstgroup, "$tag ".join(" ", @v);
             } else {
@@ -950,7 +957,8 @@ sub _gff25_string {
             }
         }
     }
-    $str2 = join(' ; ', (@firstgroup, @group));
+    $str2 = join('; ', (@firstgroup, @group));
+    $str2 = $str2.";";
     # Add Target information for Feature Pairs
     if( ! $feat->has_tag('Target') && # This is a bad hack IMHO
         ! $feat->has_tag('Group') &&
